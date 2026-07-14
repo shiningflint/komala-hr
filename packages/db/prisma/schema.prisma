@@ -1,0 +1,269 @@
+// Komala HR App data model.
+//
+// Provider is SQLite for zero-setup local development. To move to Postgres for
+// a real deployment: change `provider` below to "postgresql", set DATABASE_URL
+// to a Postgres connection string (see ../../docker-compose.yml), and re-run
+// `prisma migrate dev`. Fields here deliberately avoid SQLite-only quirks
+// beyond native enums (modeled as String + shared/src/schemas enums instead,
+// since SQLite has no native enum type).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  npwp      String?
+  address   String?
+  createdAt DateTime @default(now())
+
+  offices      Office[]
+  departments  Department[]
+  positions    Position[]
+  leaveTypes   LeaveType[]
+  payrollPeriods PayrollPeriod[]
+}
+
+model Office {
+  id           String  @id @default(cuid())
+  companyId    String
+  name         String
+  address      String?
+  latitude     Float
+  longitude    Float
+  radiusMeters Int     @default(100)
+
+  company   Company    @relation(fields: [companyId], references: [id])
+  employees Employee[]
+}
+
+model Department {
+  id        String @id @default(cuid())
+  companyId String
+  name      String
+
+  company   Company    @relation(fields: [companyId], references: [id])
+  positions Position[]
+  employees Employee[]
+}
+
+model Position {
+  id           String  @id @default(cuid())
+  companyId    String
+  departmentId String?
+  name         String
+
+  company    Company     @relation(fields: [companyId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id])
+  employees  Employee[]
+}
+
+// role: SUPER_ADMIN | HR_ADMIN | MANAGER | EMPLOYEE
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         String
+  createdAt    DateTime @default(now())
+
+  employee Employee?
+}
+
+// ptkpStatus: TK0 | TK1 | TK2 | TK3 | K0 | K1 | K2 | K3
+// employmentType: PERMANENT | CONTRACT
+// riskClass (BPJS JKK): VERY_LOW | LOW | MEDIUM | HIGH | VERY_HIGH
+model Employee {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  employeeCode  String   @unique
+  name          String
+  nik           String
+  npwp          String?
+  ptkpStatus    String
+  joinDate      DateTime
+  employmentType String  @default("PERMANENT")
+  riskClass     String   @default("LOW")
+  basicSalary   Float
+  bankName      String?
+  bankAccountNo String?
+  departmentId  String?
+  positionId    String?
+  officeId      String?
+  managerId     String?
+
+  user       User        @relation(fields: [userId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id])
+  position   Position?   @relation(fields: [positionId], references: [id])
+  office     Office?     @relation(fields: [officeId], references: [id])
+  manager    Employee?   @relation("EmployeeManager", fields: [managerId], references: [id])
+  reports    Employee[]  @relation("EmployeeManager")
+
+  attendanceRecords   AttendanceRecord[]
+  leaveBalances       LeaveBalance[]
+  leaveRequests       LeaveRequest[]       @relation("LeaveRequester")
+  approvedLeaves      LeaveRequest[]       @relation("LeaveApprover")
+  reimbursements      ReimbursementClaim[] @relation("ReimbursementRequester")
+  approvedReimbursements ReimbursementClaim[] @relation("ReimbursementApprover")
+  payslips            Payslip[]
+}
+
+// status: ON_TIME | LATE | ABSENT
+model AttendanceRecord {
+  id         String   @id @default(cuid())
+  employeeId String
+  date       DateTime
+  status     String   @default("ON_TIME")
+
+  clockInAt              DateTime?
+  clockInLat             Float?
+  clockInLng             Float?
+  clockInAccuracyM       Float?
+  clockInDistanceM       Float?
+  clockInInsideGeofence  Boolean?
+  clockInNote            String?
+
+  clockOutAt             DateTime?
+  clockOutLat            Float?
+  clockOutLng            Float?
+  clockOutAccuracyM      Float?
+  clockOutDistanceM      Float?
+  clockOutInsideGeofence Boolean?
+  clockOutNote           String?
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([employeeId, date])
+}
+
+model LeaveType {
+  id                 String @id @default(cuid())
+  companyId          String
+  name               String
+  defaultDaysPerYear Int
+
+  company  Company        @relation(fields: [companyId], references: [id])
+  balances LeaveBalance[]
+  requests LeaveRequest[]
+}
+
+model LeaveBalance {
+  id             String @id @default(cuid())
+  employeeId     String
+  leaveTypeId    String
+  year           Int
+  allocatedDays  Float
+  usedDays       Float  @default(0)
+
+  employee  Employee  @relation(fields: [employeeId], references: [id])
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id])
+
+  @@unique([employeeId, leaveTypeId, year])
+}
+
+// status: PENDING | APPROVED | REJECTED | CANCELLED
+model LeaveRequest {
+  id           String   @id @default(cuid())
+  employeeId   String
+  leaveTypeId  String
+  startDate    DateTime
+  endDate      DateTime
+  daysCount    Float
+  reason       String
+  status       String   @default("PENDING")
+  approverId   String?
+  approverNote String?
+  createdAt    DateTime @default(now())
+  decidedAt    DateTime?
+
+  employee  Employee   @relation("LeaveRequester", fields: [employeeId], references: [id])
+  approver  Employee?  @relation("LeaveApprover", fields: [approverId], references: [id])
+  leaveType LeaveType  @relation(fields: [leaveTypeId], references: [id])
+}
+
+// status: PENDING | APPROVED | REJECTED
+model ReimbursementClaim {
+  id           String   @id @default(cuid())
+  employeeId   String
+  category     String
+  amount       Float
+  description  String
+  receiptUrl   String?
+  status       String   @default("PENDING")
+  approverId   String?
+  approverNote String?
+  createdAt    DateTime @default(now())
+  decidedAt    DateTime?
+
+  employee Employee  @relation("ReimbursementRequester", fields: [employeeId], references: [id])
+  approver Employee? @relation("ReimbursementApprover", fields: [approverId], references: [id])
+}
+
+// status: DRAFT | PROCESSED | PAID
+model PayrollPeriod {
+  id          String    @id @default(cuid())
+  companyId   String
+  year        Int
+  month       Int
+  status      String    @default("DRAFT")
+  processedAt DateTime?
+  paidAt      DateTime?
+
+  company  Company   @relation(fields: [companyId], references: [id])
+  payslips Payslip[]
+
+  @@unique([companyId, year, month])
+}
+
+model Payslip {
+  id              String @id @default(cuid())
+  payrollPeriodId String
+  employeeId      String
+
+  basicSalary Float
+  allowances  Float @default(0)
+  overtimePay Float @default(0)
+  grossPay    Float
+
+  bpjsKesehatanEmployee Float @default(0)
+  bpjsKesehatanCompany  Float @default(0)
+  bpjsJhtEmployee       Float @default(0)
+  bpjsJhtCompany        Float @default(0)
+  bpjsJpEmployee        Float @default(0)
+  bpjsJpCompany         Float @default(0)
+  bpjsJkk               Float @default(0)
+  bpjsJkm               Float @default(0)
+
+  terCategory        String?
+  pph21Monthly       Float   @default(0)
+  pph21Annual        Float?
+  pph21AlreadyWithheld Float?
+  pph21TrueUp        Float?
+
+  netPay              Float
+  calculationSnapshot String // JSON-serialized full breakdown for audit
+
+  employee      Employee      @relation(fields: [employeeId], references: [id])
+  payrollPeriod PayrollPeriod @relation(fields: [payrollPeriodId], references: [id])
+
+  @@unique([payrollPeriodId, employeeId])
+}
+
+// Versioned tax configuration so multiple years of regulation can coexist.
+// All *Json fields are JSON-serialized strings (see packages/shared/src/tax).
+model TaxSetting {
+  id                 String @id @default(cuid())
+  effectiveYear      Int    @unique
+  ptkpTable          String // { [PTKPStatus]: annualAmount }
+  terCategoryMap     String // { [PTKPStatus]: "A" | "B" | "C" }
+  terBrackets        String // { A: [{upTo, rate}], B: [...], C: [...] }
+  progressiveBrackets String // [{upTo, rate}] for annual Pasal 17 / UU HPP
+  bpjsRates          String // { kesehatan: {...}, jht: {...}, jp: {...}, jkm: {...}, jkk: {...} }
+  wageCaps           String // { kesehatan: number, jp: number }
+  notes              String?
+}

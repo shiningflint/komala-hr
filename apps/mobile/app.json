@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Komala HR",
+    "slug": "komala-hr",
+    "scheme": "komalahr",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "id.co.komala.hr",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Komala HR uses your location to verify you're at the office (or an approved location) when you clock in or out."
+      }
+    },
+    "android": {
+      "package": "id.co.komala.hr",
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Komala HR uses your location to verify you're at the office (or an approved location) when you clock in or out."
+        }
+      ]
+    ]
+  }
+}

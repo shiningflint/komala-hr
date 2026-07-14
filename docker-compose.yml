@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: komala
+      POSTGRES_PASSWORD: komala
+      POSTGRES_DB: komala_hr
+    ports:
+      - "5432:5432"
+    volumes:
+      - komala_hr_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U komala -d komala_hr"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build: .
+    ports:
+      - "7777:3000"
+    environment:
+      DATABASE_URL: postgresql://komala:komala@db:5432/komala_hr
+      JWT_SECRET: super-secret-jwt-key-change-me
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  komala_hr_pg_data:

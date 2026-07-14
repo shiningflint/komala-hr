@@ -1,0 +1,254 @@
+// Postgres variant of the Prisma schema — used by the Docker image.
+// Identical to schema.prisma except for the datasource provider.
+// To use locally: copy over schema.prisma or set DATABASE_URL and change provider.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  npwp      String?
+  address   String?
+  createdAt DateTime @default(now())
+
+  offices      Office[]
+  departments  Department[]
+  positions    Position[]
+  leaveTypes   LeaveType[]
+  payrollPeriods PayrollPeriod[]
+}
+
+model Office {
+  id           String  @id @default(cuid())
+  companyId    String
+  name         String
+  address      String?
+  latitude     Float
+  longitude    Float
+  radiusMeters Int     @default(100)
+
+  company   Company    @relation(fields: [companyId], references: [id])
+  employees Employee[]
+}
+
+model Department {
+  id        String @id @default(cuid())
+  companyId String
+  name      String
+
+  company   Company    @relation(fields: [companyId], references: [id])
+  positions Position[]
+  employees Employee[]
+}
+
+model Position {
+  id           String  @id @default(cuid())
+  companyId    String
+  departmentId String?
+  name         String
+
+  company    Company     @relation(fields: [companyId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id])
+  employees  Employee[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         String
+  createdAt    DateTime @default(now())
+
+  employee Employee?
+}
+
+model Employee {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  employeeCode  String   @unique
+  name          String
+  nik           String
+  npwp          String?
+  ptkpStatus    String
+  joinDate      DateTime
+  employmentType String  @default("PERMANENT")
+  riskClass     String   @default("LOW")
+  basicSalary   Float
+  bankName      String?
+  bankAccountNo String?
+  departmentId  String?
+  positionId    String?
+  officeId      String?
+  managerId     String?
+
+  user       User        @relation(fields: [userId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id])
+  position   Position?   @relation(fields: [positionId], references: [id])
+  office     Office?     @relation(fields: [officeId], references: [id])
+  manager    Employee?   @relation("EmployeeManager", fields: [managerId], references: [id])
+  reports    Employee[]  @relation("EmployeeManager")
+
+  attendanceRecords   AttendanceRecord[]
+  leaveBalances       LeaveBalance[]
+  leaveRequests       LeaveRequest[]       @relation("LeaveRequester")
+  approvedLeaves      LeaveRequest[]       @relation("LeaveApprover")
+  reimbursements      ReimbursementClaim[] @relation("ReimbursementRequester")
+  approvedReimbursements ReimbursementClaim[] @relation("ReimbursementApprover")
+  payslips            Payslip[]
+}
+
+model AttendanceRecord {
+  id         String   @id @default(cuid())
+  employeeId String
+  date       DateTime
+  status     String   @default("ON_TIME")
+
+  clockInAt              DateTime?
+  clockInLat             Float?
+  clockInLng             Float?
+  clockInAccuracyM       Float?
+  clockInDistanceM       Float?
+  clockInInsideGeofence  Boolean?
+  clockInNote            String?
+
+  clockOutAt             DateTime?
+  clockOutLat            Float?
+  clockOutLng            Float?
+  clockOutAccuracyM      Float?
+  clockOutDistanceM      Float?
+  clockOutInsideGeofence Boolean?
+  clockOutNote           String?
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([employeeId, date])
+}
+
+model LeaveType {
+  id                 String @id @default(cuid())
+  companyId          String
+  name               String
+  defaultDaysPerYear Int
+
+  company  Company        @relation(fields: [companyId], references: [id])
+  balances LeaveBalance[]
+  requests LeaveRequest[]
+}
+
+model LeaveBalance {
+  id             String @id @default(cuid())
+  employeeId     String
+  leaveTypeId    String
+  year           Int
+  allocatedDays  Float
+  usedDays       Float  @default(0)
+
+  employee  Employee  @relation(fields: [employeeId], references: [id])
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id])
+
+  @@unique([employeeId, leaveTypeId, year])
+}
+
+model LeaveRequest {
+  id           String   @id @default(cuid())
+  employeeId   String
+  leaveTypeId  String
+  startDate    DateTime
+  endDate      DateTime
+  daysCount    Float
+  reason       String
+  status       String   @default("PENDING")
+  approverId   String?
+  approverNote String?
+  createdAt    DateTime @default(now())
+  decidedAt    DateTime?
+
+  employee  Employee   @relation("LeaveRequester", fields: [employeeId], references: [id])
+  approver  Employee?  @relation("LeaveApprover", fields: [approverId], references: [id])
+  leaveType LeaveType  @relation(fields: [leaveTypeId], references: [id])
+}
+
+model ReimbursementClaim {
+  id           String   @id @default(cuid())
+  employeeId   String
+  category     String
+  amount       Float
+  description  String
+  receiptUrl   String?
+  status       String   @default("PENDING")
+  approverId   String?
+  approverNote String?
+  createdAt    DateTime @default(now())
+  decidedAt    DateTime?
+
+  employee Employee  @relation("ReimbursementRequester", fields: [employeeId], references: [id])
+  approver Employee? @relation("ReimbursementApprover", fields: [approverId], references: [id])
+}
+
+model PayrollPeriod {
+  id          String    @id @default(cuid())
+  companyId   String
+  year        Int
+  month       Int
+  status      String    @default("DRAFT")
+  processedAt DateTime?
+  paidAt      DateTime?
+
+  company  Company   @relation(fields: [companyId], references: [id])
+  payslips Payslip[]
+
+  @@unique([companyId, year, month])
+}
+
+model Payslip {
+  id              String @id @default(cuid())
+  payrollPeriodId String
+  employeeId      String
+
+  basicSalary Float
+  allowances  Float @default(0)
+  overtimePay Float @default(0)
+  grossPay    Float
+
+  bpjsKesehatanEmployee Float @default(0)
+  bpjsKesehatanCompany  Float @default(0)
+  bpjsJhtEmployee       Float @default(0)
+  bpjsJhtCompany        Float @default(0)
+  bpjsJpEmployee        Float @default(0)
+  bpjsJpCompany         Float @default(0)
+  bpjsJkk               Float @default(0)
+  bpjsJkm               Float @default(0)
+
+  terCategory        String?
+  pph21Monthly       Float   @default(0)
+  pph21Annual        Float?
+  pph21AlreadyWithheld Float?
+  pph21TrueUp        Float?
+
+  netPay              Float
+  calculationSnapshot String
+
+  employee      Employee      @relation(fields: [employeeId], references: [id])
+  payrollPeriod PayrollPeriod @relation(fields: [payrollPeriodId], references: [id])
+
+  @@unique([payrollPeriodId, employeeId])
+}
+
+model TaxSetting {
+  id                 String @id @default(cuid())
+  effectiveYear      Int    @unique
+  ptkpTable          String
+  terCategoryMap     String
+  terBrackets        String
+  progressiveBrackets String
+  bpjsRates          String
+  wageCaps           String
+  notes              String?
+}
