@@ -20,7 +20,7 @@ pnpm db:seed      # seeds PT Komala Indonesia, 6 employees, sample attendance/le
 pnpm web:dev       # http://localhost:3000
 ```
 
-Demo login (any seeded account, same password for all): password `Komala123!`. See the console output of `pnpm db:seed` for the list of seeded emails/roles, e.g. `ariek.nugroho@komala.co.id` (Super Admin), `siti.rahayu@komala.co.id` (HR Admin).
+Demo login (any seeded account, same password for all): password `Komala123!`. Example emails: `ariek.nugroho@komala.co.id` (Super Admin), `siti.rahayu@komala.co.id` (HR Admin), `dewi.lestari@komala.co.id` (Employee).
 
 ### Mobile app
 
@@ -29,6 +29,16 @@ pnpm --filter @komala/mobile start
 ```
 
 Set `EXPO_PUBLIC_API_BASE_URL` to your machine's LAN IP (not `localhost` — that only resolves on the phone/emulator itself) when testing on a physical device or the Android emulator (`10.0.2.2` for the Android emulator's host loopback).
+
+### Docker (full stack)
+
+```bash
+docker compose up -d   # builds image, starts Postgres + web app (~90s first run for seed)
+docker compose down    # stops containers
+docker compose logs -f web   # watch startup logs
+```
+
+The Docker setup runs Postgres + Next.js in containers. The entrypoint handles schema push, seeding, and app start automatically. Access at `http://localhost:7777` (configurable in `docker-compose.yml`).
 
 ## What's implemented
 
